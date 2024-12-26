@@ -1,0 +1,69 @@
+{
+  "version": 3,
+  "name": "My lovely gateway",
+  "port": 8080,
+  "cache_ttl": "300s",
+  "timeout": "20s",
+  "endpoints": [
+    {
+      "endpoint": "main/user/me",
+      "backend": [
+        {
+          "host": ["http://user_service:8000"],
+          "url_pattern": "/user/me"
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "endpoint": "http://auth_service:8002/auth/jwt/validate_token/",
+          "method": "POST",
+          "timeout": "200ms",
+          "allow_unauthorized": false
+        },
+        "proxy/ratelimit/proxy": {
+          "max_rate": 5,
+          "capacity": 10
+        },
+        "proxy/fallback": {
+          "error": {
+            "status_code": 401,
+            "url": "http://nginx/login"
+          }
+        }
+      }
+    },
+    {
+      "endpoint": "main/user/{user_id}",
+      "backend": [
+        {
+          "host": ["http://user_service:8000"],
+          "url_pattern": "/user/{user_id}"
+        }
+      ],
+      "method": "PUT",
+      "extra_config": {
+        "auth/validator": {
+          "endpoint": "http://auth_service:8002/auth/jwt/validate_token/",
+          "method": "POST",
+          "timeout": "200ms",
+          "allow_unauthorized": false
+        },
+        "proxy/ratelimit/proxy": {
+          "max_rate": 3,
+          "capacity": 5
+        }
+      }
+    },
+      {
+      "endpoint": "main/test-user",
+      "method": "GET",
+      "backend": [
+        {
+          "host": ["http://user_service:8000"],
+          "url_pattern": "/user/test"
+        }
+        ]
+    }
+  ]
+}
+

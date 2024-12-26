@@ -1,0 +1,130 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    hostname: rabbitmq_host
+    ports:
+      - "5672:5672" # Порт rabbitmq по умолчанию
+      - "15672:15672" # Порт rabbitmq management (административный интерфейс)
+    env_file:
+      - .env
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - app-network
+
+  pg_user:
+    image: postgres
+    environment:
+      POSTGRES_DB: db_test_user_service
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    depends_on:
+      - rabbitmq
+    ports:
+      - "5433:5432"
+    networks:
+      - app-network
+
+  pg_auth:
+    image: postgres
+    environment:
+      POSTGRES_DB: db_test_auth_service
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    depends_on:
+      - rabbitmq
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+
+  auth_service:
+    container_name: auth_service
+    build:
+      context: ./services/auth_service
+      dockerfile: Dockerfile
+    env_file:
+      - ./services/auth_service/.env
+    volumes:
+      - ./rabbit:/app/rabbit
+      - ./config.py:/app/config.py
+    ports:
+      - "8002:8000"
+    depends_on:
+      - pg_auth
+      - rabbitmq
+    networks:
+      - app-network
+
+  user_service:
+    container_name: user_service
+    build:
+      context: ./services/user_service
+      dockerfile: Dockerfile
+    volumes:
+      - ./rabbit:/app/rabbit
+      - ./config.py:/app/config.py
+    env_file:
+      - ./services/user_service/.env
+    ports:
+      - "8001:8000"
+    depends_on:
+      - pg_user
+      - rabbitmq
+    networks:
+      - app-network
+
+  krakend:
+    container_name: krakend
+    build:
+      context: ./services/gateway_krakned
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - user_service
+      - auth_service
+    networks:
+      - app-network
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./services/nginx_service/nginx.conf:/etc/nginx/nginx.conf:ro
+#      - ./static:/usr/share/nginx/html:ro  # Пример для статических файлов
+      - ./services/nginx/logs:/var/log/nginx
+    depends_on:
+      - auth_service
+      - user_service
+    networks:
+      - app-network
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./portainer_data:/data
+    networks:
+      - app-network
+    ports:
+      - "9000:9000"
+
+
+
+volumes:
+  rabbitmq-data:
+
+networks:
+   app-network:
